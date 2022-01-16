@@ -1,10 +1,9 @@
 import mathutils
 
 import bpy
-import bmesh
 
-targetObj = bpy.context.active_object
-targetMesh = targetObj.data
+
+
 
 
 def check_uv(mesh):
@@ -83,7 +82,7 @@ def bake_pivot_recursion(obj):
         bake_pivot_recursion(ch)
 
 
-def main():
+def do_bake_pivot():
     # TODO:DELETE PRINT
     print('\n')
     obj_list = bpy.context.selected_objects
@@ -110,5 +109,8 @@ def main():
     bpy.ops.object.duplicate()
     bpy.ops.object.join()
 
+def pp_test():
+    print("GOOOO")
 
-main()
+
+## main()
