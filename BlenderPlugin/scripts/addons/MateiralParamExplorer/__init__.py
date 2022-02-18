@@ -1,4 +1,5 @@
 import bpy
+import re
 
 bl_info = {
     "name": "MaterialParamExplorer",
@@ -22,19 +23,25 @@ support_node_type = [
     'TEX_IMAGE',
     'CLAMP'
 ]
+param_suffix = '_param'
 
-def 
+
+def get_name(elem):
+    return elem.node_label
+
 
 class NodeInfo:
     node_name = ''
     node_type = ''
+    node_label = ''
     node_obj = None
 
     def __init__(self, node):
         if node is not None:
-            node_obj = None
-            node_type = node.type
-            node_name = node.name
+            self.node_obj = node
+            self.node_type = node.type
+            self.node_name = node.name
+            self.node_label = node.label
 
 
 def collect_param(node_tree):
@@ -42,14 +49,32 @@ def collect_param(node_tree):
     param_list = []
     if node_tree is not None and node_tree.type == 'SHADER':
         for node in node_tree.nodes:
-            ##TODO:DELETE
-            print(node.name + " :: " + node.label + " :: " + node.type)
-            ##TODO:DELETE
-            print(support_node_type.__contains__(node.type))
-            ##TODO:DELETE
-            if support_node_type.__contains__(node.type):
+            if support_node_type.__contains__(node.type) and node.name.endswith(param_suffix):
                 node_info = NodeInfo(node)
                 param_list.append(node_info)
+        param_list.sort(key=get_name)
+
+
+class ConvertToParam(bpy.types.Operator):
+    bl_idname = "param_explorer.convert_to_param"
+    bl_label = "ConvertToParam"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        if node_tree is not None and node_tree.type == 'SHADER':
+            if node_tree.nodes.active is not None:
+                target_node = node_tree.nodes.active
+                if support_node_type.__contains__(target_node.type):
+                    old_name = target_node.name
+                    if old_name.endswith(param_suffix):
+                        new_name = old_name.removesuffix(param_suffix)
+                        target_node.name = new_name
+                    else:
+                        new_name = old_name + param_suffix
+                        target_node.name = new_name
+            collect_param(node_tree)
+
+        return {'FINISHED'}
 
 
 class RefreshParam(bpy.types.Operator):
@@ -75,16 +100,40 @@ class UI_PT_PivotPainterPanel(bpy.types.Panel):
         layout.split(factor=5.0)
         layout.label(text="材质参数")
         layout.operator('param_explorer.refresh_param')
+        layout.separator()
+        layout.operator('param_explorer.convert_to_param')
         tree = context.space_data.edit_tree
         if node_tree != tree and tree.type == 'SHADER':
             node_tree = tree
-        for node in tree.nodes:
-            if node.type == 'CLAMP':
-                layout.prop(node.inputs[0], 'default_value', slider=True)
+            if node_tree is not None and node_tree.type == 'SHADER':
+                collect_param(node_tree)
+
+        # for node in tree.nodes:
+        #     if node.type == 'CLAMP':
+        #         layout.prop(node.inputs[0], 'default_value', slider=True)
+        #     elif node.type == 'VALUE':
+        #         layout.prop(node.outputs[0], 'default_value')
+        #     elif node.type == 'TEX_IMAGE':
+        #         layout.template_ID(node, "image", open='image.open')
         # I1 = tree.nodes['I1']
         # I2 = tree.nodes['I2']
         # layout.template_ID(I1, "image", open='image.open')
         # layout.template_ID(I2, "image", open='image.open')
+        box = layout.box()
+        box.label(text="Parameters:")
+        for node_info in param_list:
+            if node_info is not None and node_info.node_obj is not None:
+                type = node_info.node_type
+                if type == 'VALUE':
+                    row = box.column()
+                    row.label(text=node_info.node_obj.label + ':')
+                    row.prop(node_info.node_obj.outputs[0], 'default_value', text='',
+                             slider=False)
+                elif type == 'CLAMP':
+                    row = box.column()
+                    row.label(text=node_info.node_obj.label + ':')
+                    row.prop(node_info.node_obj.inputs[0], 'default_value', text='',
+                             slider=True)
 
     @classmethod
     def poll(cls, context):
@@ -93,6 +142,7 @@ class UI_PT_PivotPainterPanel(bpy.types.Panel):
 
 class_to_register = (
     RefreshParam,
+    ConvertToParam,
     UI_PT_PivotPainterPanel,
 )
 
