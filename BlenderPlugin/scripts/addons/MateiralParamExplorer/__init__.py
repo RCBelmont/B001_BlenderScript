@@ -15,7 +15,7 @@ bl_info = {
 
 node_tree = None
 param_list = []
-
+param_node_color = (0.087, 0.164, 0.246)
 support_node_type = [
     'VALUE',
     'RGB',
@@ -28,6 +28,8 @@ param_suffix = '_param'
 
 def get_name(elem):
     return elem.node_label
+
+
 
 
 class NodeInfo:
@@ -69,11 +71,13 @@ class ConvertToParam(bpy.types.Operator):
                     if old_name.endswith(param_suffix):
                         new_name = old_name.removesuffix(param_suffix)
                         target_node.name = new_name
+                        target_node.use_custom_color = False
                     else:
                         new_name = old_name + param_suffix
                         target_node.name = new_name
+                        target_node.use_custom_color = True
+                        target_node.color = param_node_color
             collect_param(node_tree)
-
         return {'FINISHED'}
 
 
@@ -85,6 +89,11 @@ class RefreshParam(bpy.types.Operator):
     def execute(self, context):
         if node_tree is not None and node_tree.type == 'SHADER':
             collect_param(node_tree)
+            if node_tree is not None and node_tree.type == 'SHADER':
+                for node in node_tree.nodes:
+                    if support_node_type.__contains__(node.type) and node.name.endswith(param_suffix):
+                        node.use_custom_color = True
+                        node.color = param_node_color
         return {'FINISHED'}
 
 
@@ -102,6 +111,7 @@ class UI_PT_PivotPainterPanel(bpy.types.Panel):
         layout.operator('param_explorer.refresh_param')
         layout.separator()
         layout.operator('param_explorer.convert_to_param')
+        layout.split(factor=15.0)
         tree = context.space_data.edit_tree
         if node_tree != tree and tree.type == 'SHADER':
             node_tree = tree
@@ -123,17 +133,37 @@ class UI_PT_PivotPainterPanel(bpy.types.Panel):
         box.label(text="Parameters:")
         for node_info in param_list:
             if node_info is not None and node_info.node_obj is not None:
+                box1 = box.box()
                 type = node_info.node_type
-                if type == 'VALUE':
-                    row = box.column()
+                row = box1.column()
+                if len(node_info.node_obj.label) == 0:
+                    row.label(text="UnNamedParam" + ':')
+                else:
                     row.label(text=node_info.node_obj.label + ':')
+                ## VALUE
+                if type == support_node_type[0]:
                     row.prop(node_info.node_obj.outputs[0], 'default_value', text='',
                              slider=False)
-                elif type == 'CLAMP':
-                    row = box.column()
-                    row.label(text=node_info.node_obj.label + ':')
+                ## RGB
+                if type == support_node_type[1]:
+                    row.prop(node_info.node_obj.outputs[0], 'default_value', text='',
+                             slider=False)
+                ## XYZ
+                elif type == support_node_type[2]:
                     row.prop(node_info.node_obj.inputs[0], 'default_value', text='',
                              slider=True)
+                    row.prop(node_info.node_obj.inputs[1], 'default_value', text='',
+                             slider=True)
+                    row.prop(node_info.node_obj.inputs[2], 'default_value', text='',
+                             slider=True)
+                ## IMAGE
+                elif type == support_node_type[3]:
+                    row.template_ID(node_info.node_obj, "image", open='image.open')
+                ## CLAMP
+                elif type == support_node_type[4]:
+                    row.prop(node_info.node_obj.inputs[0], 'default_value', text='',
+                             slider=True)
+                row.split(factor=10.0)
 
     @classmethod
     def poll(cls, context):
