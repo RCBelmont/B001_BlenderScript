@@ -71,7 +71,7 @@ def find_func_end(target_list, func_name):
 node_type = NodeType.Shader
 poll_type = PollType.eevee_shader_nodes_poll
 # bsdf_two_side
-node_kw = "bsdf_two_side"
+node_kw = "bsdf_new_shading"
 # bsdf two side
 node_kw1 = node_kw.replace("_", " ")
 # Bsdf Two Side
@@ -144,7 +144,7 @@ def shader_file():
     f.write("#ifndef VOLUMETRICS\n")
     f.write("void shader_func_" + node_kw + "(vec4 TestColor, out Closure result)\n")
     f.write("{\n")
-    f.write("\tresult.radiance = TestColor;\n")
+    f.write("\tresult.radiance = vec3(TestColor.r, TestColor.g, TestColor.b);\n")
     f.write("}\n")
     f.write("#endif\n")
     f.close()
