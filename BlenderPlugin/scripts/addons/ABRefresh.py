@@ -18,9 +18,16 @@ class Test_Ops(bpy.types.Operator):
     bl_label = "Test"
     bl_options = {'REGISTER'}
 
+    @classmethod
+    def poll(cls, context):
+        count = len(context.selected_files)
+        return count > 0
+
     def execute(self, context):
         for file in context.selected_files:
-            file.local_id.asset_generate_preview()
+            print(file.local_id)
+            if file.local_id is not None:
+                file.local_id.asset_generate_preview()
         return {'FINISHED'}
 
 
