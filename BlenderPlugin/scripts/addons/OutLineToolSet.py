@@ -20,6 +20,7 @@ modifier_name = 'MyOutline'
 vert_group_name = 'OutlineGroup'
 material_name = 'OutlineMaterial'
 vert_color_name = 'Col'
+def_material_name = 'default_mat'
 
 
 def prepare_vertex_group(obj: 'bpy.types.Object'):
@@ -38,11 +39,17 @@ def init_modifier(obj: 'bpy.types.Object'):
         mod = obj.modifiers.new(modifier_name, "SOLIDIFY")
     mod = bpy.types.SolidifyModifier(mod)
     mod.offset = 1
-    mod.thickness = 0.9
+    mod.thickness = 0.05
     mod.use_flip_normals = True
     mod.vertex_group = vert_group_name
     mod.material_offset = 100
     mod.use_rim = False
+
+
+def create_default_mat():
+    mat = bpy.data.materials.new(def_material_name)
+    mat.use_nodes = True
+    return mat;
 
 
 def create_material():
@@ -89,10 +96,36 @@ def create_material():
 
 
 def init_material(obj: 'bpy.types.Object'):
+    if def_material_name not in bpy.data.materials:
+        def_mat = create_default_mat()
+    else:
+        def_mat = bpy.data.materials.get(def_material_name)
+
     if material_name not in bpy.data.materials:
         mat = create_material()
     else:
         mat = bpy.data.materials.get(material_name)
+    mesh = bpy.types.Mesh(obj.data)
+    if len(mesh.materials) <= 0:
+        mesh.materials.append(def_mat)
+
+    if material_name in mesh.materials:
+        idx = mesh.materials.find(material_name)
+        obj.active_material_index = idx
+        for i in range(idx, len(mesh.materials)):
+            bpy.ops.object.material_slot_move(direction="DOWN")
+    else:
+        mesh.materials.append(mat)
+
+
+def init_vert_color(obj: 'bpy.types.Object'):
+    mesh = bpy.types.Mesh(obj.data)
+    if vert_color_name not in mesh.color_attributes:
+        attr = mesh.color_attributes.new(vert_color_name, domain='CORNER', type='BYTE_COLOR')
+    else:
+        attr = mesh.color_attributes.get(vert_color_name)
+    mesh.color_attributes.active_color = attr
+    mesh.attributes.active = attr
 
 
 class OPT_AddOutLine(bpy.types.Operator):
@@ -105,10 +138,10 @@ class OPT_AddOutLine(bpy.types.Operator):
         if context.active_object and type(context.active_object.data) == bpy.types.Mesh:
             act_obj = bpy.types.Object(context.active_object)
             # Deal Modifier
-            # prepare_vertex_group(act_obj)
-            # init_modifier(act_obj)
+            init_vert_color(act_obj)
+            prepare_vertex_group(act_obj)
+            init_modifier(act_obj)
             init_material(act_obj)
-
         return {'FINISHED'}
 
 
