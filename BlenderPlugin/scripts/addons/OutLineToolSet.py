@@ -49,7 +49,7 @@ def init_modifier(obj: 'bpy.types.Object'):
 def create_default_mat():
     mat = bpy.data.materials.new(def_material_name)
     mat.use_nodes = True
-    return mat;
+    return mat
 
 
 def create_material():
@@ -64,6 +64,7 @@ def create_material():
     n_output = nodes.new("ShaderNodeOutputMaterial")
     n_mix = nodes.new("ShaderNodeMixShader")
     n_rgb = nodes.new("ShaderNodeRGB")
+    n_rgb.outputs[0].default_value = (0, 0, 0, 1)
     n_geo = nodes.new("ShaderNodeNewGeometry")
     n_sub = nodes.new("ShaderNodeMath")
     n_sub.operation = 'SUBTRACT'
@@ -126,6 +127,58 @@ def init_vert_color(obj: 'bpy.types.Object'):
         attr = mesh.color_attributes.get(vert_color_name)
     mesh.color_attributes.active_color = attr
     mesh.attributes.active = attr
+
+
+def get_key_string(category, operator):
+    kc = bpy.context.window_manager.keyconfigs
+    if kc.addon.keymaps[category].keymap_items.find(operator) != -1:
+        km = kc.addon.keymaps[category].keymap_items[operator]
+        return '(' + km.to_string() + ')'
+    return ""
+
+
+class OPT_RemoveVertFromGroup(bpy.types.Operator):
+    bl_idname = "rcb_weight2color.remove_vert_from_group"
+    bl_label = "RemoveFormGroup"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        act_obj = context.active_object
+        mesh_data = bpy.types.Mesh(act_obj.data)
+        vert_group = act_obj.vertex_groups.active
+        for v in mesh_data.vertices:
+            if v.select:
+                vert_group.add(v.index, 0.5, 'SUBTRACT')
+
+    @classmethod
+    def poll(cls, context):
+        if bpy.context.mode is not 'EDIT_MESH':
+            return False
+        act_obj = bpy.types.Object(context.active_object)
+        mesh_data = bpy.types.Mesh(act_obj.data)
+        vert_group = act_obj.vertex_groups.active
+        return vert_group is not None
+
+
+class OPT_AddVertToGroup(bpy.types.Operator):
+    bl_idname = "rcb_weight2color.add_vert_to_group"
+    bl_label = "AddToGroup"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        act_obj = context.active_object
+        mesh_data = bpy.types.Mesh(act_obj.data)
+        vert_group = act_obj.vertex_groups.active
+        verL = [v.index for v in mesh_data.vertices if v.select]
+        vert_group.add(verL, 0.5, 'ADD')
+
+    @classmethod
+    def poll(cls, context):
+        if bpy.context.mode != 'EDIT_MESH':
+            return False
+        act_obj = bpy.types.Object(context.active_object)
+        vert_group = act_obj.vertex_groups.active
+        return vert_group is not None
 
 
 class OPT_AddOutLine(bpy.types.Operator):
@@ -211,14 +264,6 @@ class OPT_TransferWeightToColor(bpy.types.Operator):
         return True
 
 
-def get_key_string(category, operator):
-    kc = bpy.context.window_manager.keyconfigs
-    if kc.addon.keymaps[category].keymap_items.find(operator) != -1:
-        km = kc.addon.keymaps[category].keymap_items[operator]
-        return '(' + km.to_string() + ')'
-    return ""
-
-
 class VIEW3D_PT_WeightToColorPanel(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -227,7 +272,7 @@ class VIEW3D_PT_WeightToColorPanel(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return bpy.context.mode == "OBJECT" or bpy.context.mode == "PAINT_WEIGHT"
+        return bpy.context.mode in ["OBJECT", "PAINT_WEIGHT", 'EDIT_MESH']
 
     def draw(self, context):
         layout = self.layout
@@ -235,7 +280,6 @@ class VIEW3D_PT_WeightToColorPanel(bpy.types.Panel):
         layout.operator('rcb_weight2color.switch_mode_weight',
                         text='SwitchMode' + get_key_string('3D View', 'rcb_weight2color.switch_mode_weight'))
         layout.split(factor=25)
-
         global vert_group_check
         global vert_color_check
         vert_group_check = False
@@ -246,52 +290,82 @@ class VIEW3D_PT_WeightToColorPanel(bpy.types.Panel):
                 layout.alert = True
                 layout.label(text='Please Select Object With Mesh')
                 return
-            layout.label(text="TargetObject:")
-            layout.label(text="    " + actObj.name)
-            layout.split(factor=10)
+
+            valid_mods = [x for x in actObj.modifiers if modifier_name == x.name and x.type == "SOLIDIFY"]
+
+            box = layout.box()
+            box.label(text="Operate:")
             # Button Add Modifier
-            layout.operator('rcb_weight2color.add_outline')
+            box.operator('rcb_weight2color.add_outline', text='Init Outline')
+            box.split(factor=10)
+            if len(valid_mods):
+                mod = valid_mods[0]
+                box.prop(mod, 'thickness')
+            box.split(factor=10)
+            box.label(text="VertGroup Operate:")
+            row = box.row()
+            row.operator('object.vertex_group_assign', text='Assign')
+            row.operator('object.vertex_group_remove_from', text='Remove')
+            row = box.row()
+            row.operator('object.vertex_group_select', text='SelectGroup')
+            row.operator('object.vertex_group_deselect', text='DeselectGroup')
+            box.split(factor=10)
+            box.label(text="Weight Operate:")
+            box.operator('object.vertex_group_smooth', text='Smooth')
+            box.split(factor=10)
+            box.prop(bpy.context.scene.tool_settings.unified_paint_settings, 'weight')
+            box.operator('paint.weight_set', text='SetWeight')
+
+            # InfomationText
+            box = layout.box()
+            box.label(text="INFO:")
+            box.label(text="TargetObject:")
+            box.label(text="    " + actObj.name)
             # Check VertGroup
             if actObj.vertex_groups.active_index != -1:
-                layout.label(text="Source VertGroup:")
-                layout.label(text="    " + actObj.vertex_groups.active.name)
+                box.label(text="Source VertGroup:")
+                box.label(text="    " + actObj.vertex_groups.active.name)
                 vert_group_check = True
             else:
-                layout.alert = True
-                layout.label(text="Need A Active VertexGroup!")
-            layout.split(factor=25)
+                box.alert = True
+                box.label(text="Source VertGroup:")
+                box.label(text="Need A Active VertexGroup!")
+            box.split(factor=15)
             meshData = bpy.types.Mesh(actObj.data)
             # Check VertColorAttribute
             if meshData.color_attributes.active_color_index != -1:
                 attr = meshData.color_attributes.active
-                layout.label(text="Target ColorAttribute:")
-                layout.label(
+                box.label(text="Target ColorAttribute:")
+                box.label(
                     text="    " + meshData.color_attributes.active.name)
                 if attr.data_type != 'BYTE_COLOR' or attr.domain != 'CORNER':
-                    layout.alert = True
-                layout.label(text="    domain: " + attr.domain + "  data_type: " + attr.data_type)
+                    box.alert = True
+                box.label(text="    domain: " + attr.domain + "  data_type: " + attr.data_type)
                 vert_color_check = True
             else:
-                layout.alert = True
-                layout.label(text="Need A Active ColorAttribute!")
-            layout.split(factor=25)
+                box.alert = True
+                box.label(text="Target ColorAttribute:")
+                box.label(text="    Need A Active ColorAttribute!")
+            box.split(factor=15)
 
             if vert_color_check:
                 attr = meshData.color_attributes.active_color
                 if attr.data_type != 'BYTE_COLOR' or attr.domain != 'CORNER':
-                    layout.alert = True
-                    layout.label(text="This Color Attr Cannot Be Read By Engine")
-                    layout.operator('rcb_weight2color.convert_attr', text='Click To Convert')
+                    box.alert = True
+                    box.label(text="This Color Attr Cannot Be Read By Engine")
+                    box.operator('rcb_weight2color.convert_attr', text='Click To Convert')
                 else:
                     # Draw Opt
                     if vert_color_check and vert_group_check:
-                        layout.operator('rcb_weight2color.transfer')
+                        box.operator('rcb_weight2color.transfer')
         else:
             layout.alert = True
             layout.label(text="Please Select A Mesh Object")
 
 
 cls = (
+    OPT_RemoveVertFromGroup,
+    OPT_AddVertToGroup,
     OPT_AddOutLine,
     OPT_ConvertColorAttr,
     OPT_SwitchModeWeight,
