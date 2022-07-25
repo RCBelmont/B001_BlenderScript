@@ -206,8 +206,11 @@ class OPT_SwitchModeWeight(bpy.types.Operator):
     def execute(self, context):
         if context.mode == 'PAINT_WEIGHT':
             bpy.ops.object.mode_set(mode='OBJECT')
+            bpy.context.space_data.shading.type = 'MATERIAL'
         else:
             bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
+            bpy.context.space_data.shading.type = 'SOLID'
+            bpy.context.object.data.use_paint_mask_vertex = True
         return {"FINISHED"}
 
 
